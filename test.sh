@@ -16,11 +16,11 @@ test_line () {
 	printf "\e[0m"
 	kill -9 $pid
 	wait $pid 2>/dev/null
-	#cat -e out.res > out
+	cat -e out.res > out
 }
 
 printf "\e[1;32mCompile\n"
-gcc -g -Wall -Werror -Wextra -DTEST_SH microshell_mine.c -o microshell
+gcc -g -Wall -Werror -Wextra -DTEST_SH test_c.c -o microshell
 printf "\e[1;36mTest\n\e[0m"
 rm -f out.res leaks.res out
 test_line /bin/ls

@@ -1,4 +1,5 @@
-# !/bin/bash
+#!/bin/bash
+
 while true; do
 	micro_pid=$(pgrep micro)
 	if [ -n "$micro_pid" ]

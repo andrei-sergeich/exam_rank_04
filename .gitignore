@@ -62,3 +62,4 @@ tester
 .DS_Store
 .DS_Store?
 microshell
+out*.res

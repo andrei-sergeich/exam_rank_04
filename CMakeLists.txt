@@ -3,8 +3,8 @@ project(exam_rank_04 C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(microshell
-        microshell.c)
+add_executable(microshellas
+        microshellas.c)
 
 add_executable(microshell_mine
         microshell_mine.c)
