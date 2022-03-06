@@ -1,124 +1,135 @@
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <sys/wait.h>															// for Linux
+#include <sys/types.h>															// for Linux
 
-void exit_fatal (void)
+#ifdef TEST_SH
+# define TEST		1
+#else
+# define TEST		0
+#endif
+
+int	ft_strlen(char *str)
 {
-	write (2, "error: fatal\n", 14);
-	exit (1);
-}
+	int	len;
 
-int ft_strlen(char *s)
-{
-	int i = 0;
-	while (s[i] != '\0')
-		i++;
-	return (i);
-}
-
-int ft_cd(char **line)
-{
-	int result;
-
-	if (line[1] && line[2] == NULL)
-	{
-		result = chdir(line[1]);
-		if (result == -1)
-		{
-			write (2, "error: cd: cannot change directory to ", 38);
-			write (2, line[1], ft_strlen(line[1]));
-			write (2, "\n", 1);
-		}
-	}
-	else
-		write(2, "error: cd: bad arguments\n", 25);
-	return (0);
-}
-
-int ft_linelen(char **s)
-{
-	int len = 0;
-
-	while (s[len] && strcmp(s[len], ";") && strcmp(s[len], "|"))
+	len = 0;
+	if (!str)
+		return (len);
+	while (str[len])
 		len++;
 	return (len);
 }
 
-int main(int argc, char **argv, char **env)
+void	exit_fatal(void)
 {
-	int i = 1;
-	int j;
-	char **line = NULL;
-	int opened_pipe = 0;
-	int len;
-	pid_t pid;
-	int savefd0 = dup(0);
-	int savefd1 = dup(1);
-	int pipefd[2];
+	write(2, "error: fatal\n", ft_strlen("error: fatal\n"));
+	exit(EXIT_FAILURE);
+}
 
-	while(i < argc)
+int	cmd_len(char **arg)
+{
+	int	len;
+
+	len = 0;
+	while (arg[len] && strcmp(arg[len], ";") != 0 && strcmp(arg[len], "|") != 0)
+		len++;
+	return (len);
+}
+
+int	execute_cd(char **path)
+{
+	int	go_to;
+
+	if (path[1] && path[2] == NULL)
 	{
-		if (!(strcmp(argv[i], ";")) || !(strcmp(argv[i], "|")))
-			i++; // пропускаем если ; или |
+		go_to = chdir(path[1]);
+		if (go_to == -1)
+		{
+			write(2, "error: cd: cannot change directory to ", ft_strlen("error: cd: cannot change directory to "));
+			write(2, path[1], ft_strlen(path[1]));
+			write(2, "\n", 1);
+		}
+	}
+	else
+		write(2, "error: cd: bad arguments\n", ft_strlen("error: cd: bad arguments\n"));
+	return (0);
+}
+
+int	main(int argc, char **argv, char **envp)
+{
+	int		it = 1;
+	int		begin;
+	char	**cmd;
+	int		len;
+	int		opened_pipe = 0;
+	int		pipeFD[2];
+	int		savedFD_0 = dup(0);
+	int		savedFD_1 = dup(1);
+	pid_t	pid;
+
+	while (it < argc)
+	{
+		if (strcmp(argv[it], ";") == 0 || strcmp(argv[it], "|") == 0)			// пропускаем, если ; или |
+			it++;
 		else
 		{
-			len = ft_linelen(&argv[i]); // считаем сколько элементов записать в подстроку с аргументами
-			if (!(line = (char **)malloc(sizeof(char *) * (len + 1))))
-				exit_fatal(); // память под указатели на аргументы
-			line[len] = NULL;
-			j = i;
-			while (argv[i] && strcmp(argv[i], ";") && strcmp(argv[i], "|"))
+			len = cmd_len(&argv[it]);										// считаем сколько элементов записать в подстроку с аргументами
+			if (!(cmd = (char **) malloc(sizeof(char *) * (len + 1))))		// память под указатели на аргументы
+				exit_fatal();
+			cmd[len] = NULL;
+			begin = it;
+			while (argv[it] && strcmp(argv[it], ";") != 0 && strcmp(argv[it], "|") != 0)
 			{
-				line[i - j] = argv[i];
-				i++; // переписываем указатели на аргументы из аргв в новую подстроку
+				cmd[it - begin] = argv[it];										// переписываем указатели на аргументы
+				it++;
 			}
-			if (opened_pipe) // если был открыт пайп
+			if (opened_pipe)													// если был открыт пайп
 			{
-				dup2(pipefd[0], 0);
-				close(pipefd[0]);
+				dup2(pipeFD[0], 0);
+				close(pipeFD[0]);
 			}
-			if (argv[i] && !(strcmp(argv[i], "|"))) // если нужно открыть пайп
+			if (argv[it] && strcmp(argv[it], "|") == 0)							// если нужно открыть пайп
 			{
-				if (pipe(pipefd) == -1)
+				if (pipe(pipeFD) == -1)
 					exit_fatal();
-				dup2(pipefd[1], 1);
-				close(pipefd[1]);
+				dup2(pipeFD[1], 1);
+				close(pipeFD[1]);
 			}
-			if (!(strcmp(line[0], "cd") )) // если встроенная команда cd
-				ft_cd(line);
+			if (strcmp(cmd[0], "cd") == 0)										// если встретили команду cd
+				execute_cd(cmd);
 			else
 			{
-				pid = fork(); // новый процесс
-				if (pid == 0) // процесс-ребёнок
+				if ((pid = fork()) < 0)											// если ошибка
+					exit_fatal();
+				if (pid == 0)													// дочерний процесс
 				{
-					if ((execve(line[0], line, env)) == -1) // запуск экзешника
+					if (execve(cmd[0], cmd, envp) == -1)				// исполняем команду
 					{
-						write (2, "error: cannot execute ", 22);
-						write (2, line[0], ft_strlen(line[0]));
-						write (2, "\n", 1);
-						free(line); // избавляемся от утечек!
+						write(2, "error: cannot execute ", ft_strlen("error: cannot execute "));
+						write(2, cmd[0], ft_strlen(cmd[0]));
+						write(2, "\n", 1);
+						free(cmd);												// избавляемся от утечек
 						return (0);
 					}
 				}
-				if (pid < 0) // если ошибка
-					exit_fatal();
-				waitpid(pid, &j, 0); // процесс-родитель
+				waitpid(pid, &begin, 0);										// родительский процесс
 			}
-			if (opened_pipe) // закрываем часть пайпа, если он был открыт в прошлой команде
+			if (opened_pipe)													// закрываем часть пайпа, если он был открыт в прошлой команде
 			{
-				dup2(savefd0, 0);
+				dup2(savedFD_0, 0);
 				opened_pipe = 0;
 			}
-			if (argv[i] && !(strcmp(argv[i], "|"))) // закрываем другую часть пайпа, если открывали сейчас
+			if (argv[it] && strcmp(argv[it], "|") == 0)							// закрываем часть пайпа, если открывали сейчас
 			{
-				dup2(savefd1, 1);
+				dup2(savedFD_1, 1);
 				opened_pipe = 1;
 			}
-			free(line); // избавляемся от утечек!
+			free(cmd);															// избавляемся от утечек
 		}
 	}
+	if (TEST)
+		while (1);
 	return (0);
 }
